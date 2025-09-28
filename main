@@ -1,0 +1,40 @@
+import requests
+from datetime import datetime
+
+def get_warranty_days_left(serial_number: str) -> int:
+    """
+    Returns the number of days of warranty remaining for a Lenovo device.
+    :param serial_number: Serial number of the Lenovo product
+    :return: days remaining (int), or -1 if not found
+    """
+    url = f"https://pcsupport.lenovo.com/us/en/api/v4/serials/{serial_number}/warranty"
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    resp = requests.get(url, headers=headers)
+    if resp.status_code != 200:
+        print(f"Error: {resp.status_code}")
+        return -1
+
+    data = resp.json()
+
+    try:
+        # Usually 'warranties' is a list with start and end dates
+        warranty_info = data['result']['warranties'][0]
+        end_date_str = warranty_info['endDate']  # e.g. '2025-12-31T00:00:00Z'
+        end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00")).date()
+        today = datetime.utcnow().date()
+        days_remaining = (end_date - today).days
+        return days_remaining
+    except Exception as e:
+        print("Could not parse warranty info:", e)
+        return -1
+
+if __name__ == "__main__":
+    serial = input("Enter Lenovo serial number: ").strip()
+    days_left = get_warranty_days_left(serial)
+    if days_left >= 0:
+        print(f"Warranty remaining: {days_left} days")
+    else:
+        print("Could not fetch warranty information.")
