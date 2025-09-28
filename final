@@ -1,0 +1,71 @@
+from playwright.sync_api import sync_playwright
+from datetime import datetime
+
+def get_warranty_days(serial_number: str) -> int:
+    """
+    Returns the number of days remaining for a Lenovo product warranty
+    given the serial number. Returns -1 if unable to determine.
+    """
+    days_remaining = -1
+    url = "https://pcsupport.lenovo.com/in/en/warrantylookup"
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)  # Change to True for headless
+        context = browser.new_context(locale="en-IN")
+        page = context.new_page()
+
+        try:
+            page.goto(url, wait_until="networkidle", timeout=60000)
+
+            # Handle "Proceed with India" popup if present
+            try:
+                proceed_button = page.query_selector('text="Proceed with India"')
+                if proceed_button:
+                    proceed_button.click()
+                    page.wait_for_timeout(2000)
+            except:
+                pass
+
+            # Wait explicitly for the serial number input
+            input_box = page.wait_for_selector('input.button-placeholder__input', state="visible", timeout=60000)
+            input_box.fill(serial_number)
+            input_box.press("Enter")
+
+            # Wait explicitly for End Date elements
+            page.wait_for_selector('span.property-title:has-text("End Date") + span.property-value', timeout=60000)
+
+            # Extract all End Date values
+            end_dates_elements = page.query_selector_all(
+                'span.property-title:has-text("End Date") + span.property-value'
+            )
+
+            end_dates = []
+            for e in end_dates_elements:
+                try:
+                    date_text = e.text_content().strip()
+                    if date_text:
+                        end_dates.append(datetime.strptime(date_text, "%Y-%m-%d"))
+                except:
+                    continue
+
+            if end_dates:
+                # Pick the latest date
+                latest_end_date = max(end_dates)
+                # Include today in count
+                days_remaining = (latest_end_date.date() - datetime.now().date()).days + 1
+
+        except Exception as e:
+            print("Error while fetching warranty info:", e)
+        finally:
+            browser.close()
+
+    return days_remaining
+
+# Example usage
+if __name__ == "__main__":
+    serial = "MP2P0QGZ"  # Replace with your serial number
+    days = get_warranty_days(serial)
+    if days >= 0:
+        print(f"Days remaining: {days}")
+    else:
+        print("Unable to determine warranty days.")
